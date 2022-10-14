@@ -1,66 +1,63 @@
 #!/bin/bash
 
-command -v play >/dev/null 2>&1 || {
-echo "I require the sox package but it's not installed. Aborting." >&2
-exit 1; }
+# Automatically run at startup by editting crontab:
+# `crontab -e`
+# And adding line at end of file:
+# `@reboot bash -l /home/ofirnachum/sleepnoise/sleepnoise`
 
-command -v amixer >/dev/null 2>&1 || {
-echo "I require the alsa-utils package but it's not installed. Aborting." >&2
-exit 1; }
-
-usage() { echo "Usage: $0 [-r <# of 15 sec repeats>] [-n <white|pink>]"; exit 1; }
-          
-NPREFIX=/usr/share/sleepnoise
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+NPREFIX=$SCRIPT_DIR/files
 VOLATILE=/tmp
-LOG_FILE=~/sleepnoise.log
+LOG_FILE=~/logs_sleepnoise.log
 NOW=$(date "+%Y-%m-%d %H:%M:%S")
 
-while getopts ":r:n:" opt; do
-  case "$opt" in
-    r)
-      if [[ $OPTARG =~ ^[0-9]+$ ]]; then
-        repeats=$OPTARG
-      else
-        echo "ERROR: -r must be an integer!"
-        exit 1
-      fi
-      ;;
-    n)
-      case $OPTARG in
-        white|White|WHITE|w)
-          noise="$NPREFIX/audiocheck.net_white_192k_-3dBFS.wav"
-          ;;
-        pink|Pink|PINK|p)
-          noise="$NPREFIX/audiocheck.net_pink_192k_-3dBFS.wav"
-          ;;
-        *)
-          # default to white if none specified or something else specified
-          echo "ERROR: -n is either white or pink"
-          exit 1
-          ;;
-      esac
-      ;;
-    *)
-      usage ;;
-  esac
-done
-shift $((OPTIND-1))
-
-# user didn't define number of repeats
-[[ -n "$repeats" ]] || usage
-
-# -n is optional so default to white if not specified
-[[ -n "$noise" ]] || noise="$NPREFIX/audiocheck.net_white_192k_-3dBFS.wav"
-
-[[ -f "$noise" ]] || {
-echo "$noise not found. Aborting." >&2
-exit 1; }
+#noise="$NPREFIX/audiocheck.net_white_192k_-3dBFS.wav"
+#noise="$NPREFIX/audiocheck.net_pink_192k_-3dBFS.wav"
+noise="$NPREFIX/audiocheck.net_brownnoise.wav"
 
 # copy wav to tmpfs for 0 disk usage
 [[ -f "$VOLATILE/${noise##*/}" ]] || cp "$noise" "$VOLATILE"
 
-echo "$NOW ${noise##*/} $repeats" >> $LOG_FILE
-amixer cset numid=3 1 &>/dev/null
-play -q -c 2 "$VOLATILE/${noise##*/}" repeat $repeats &>/dev/null &
+get_volume() {
+  currenttime=$(date +%H:%M)
+  if [[ "$currenttime" < "06:00" ]]
+  then
+    echo "0.0"
+  elif [[ "$currenttime" < "06:30" ]]
+  then
+    echo "0.5"
+  elif [[ "$currenttime" < "09:00" ]]
+  then
+    echo "1"
+  elif [[ "$currenttime" < "17:00" ]]
+  then
+    echo "0.5"
+  elif [[ "$currenttime" < "20:30" ]]
+  then
+    echo "1"
+  elif [[ "$currenttime" < "21:00" ]]
+  then
+    echo "0.8"
+  elif [[ "$currenttime" < "21:30" ]]
+  then
+    echo "0.6"
+  else
+    echo "0"
+noise="$NPREFIX/audiocheck.net_pink_192k_-3dBFS.wav"
+  fi
+}
 
-# vim:set ts=2 sw=2 et:
+play_sound() {
+  volume=$1
+  repeats=$2
+  echo "$NOW ${noise##*/} $repeats" >> $LOG_FILE
+  AUDIODEV=hw:2,0 play --volume=$volume -q -c 2 "$VOLATILE/${noise##*/}" repeat $repeats >/dev/null
+  #play --volume=$volume -q -c 2 "$VOLATILE/${noise##*/}" repeat $repeats >/dev/null
+}
+
+while true
+do
+  volume=$(get_volume)
+  echo $volume >> $LOG_FILE
+  play_sound $volume 100
+done
