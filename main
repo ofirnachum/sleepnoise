@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# Automatically run at startup by editting crontab:
+# `crontab -e`
+# And adding line at end of file:
+# `@reboot bash -l /home/ofirnachum/sleepnoise/sleepnoise`
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+SCHEDULE=$SCRIPT_DIR/schedule.txt
+
+sigint_handler()
+{
+  rkill $PID
+  exit
+}
+
+trap sigint_handler SIGINT
+
+while true
+do
+  bash $SCRIPT_DIR/sleepnoise &
+  PID=$!
+  inotifywait -e modify -e move -e create -e delete -e attrib "$SCHEDULE"
+  rkill $PID
+done

@@ -7,6 +7,7 @@
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 NPREFIX=$SCRIPT_DIR/files
+SCHEDULE=$SCRIPT_DIR/schedule.txt
 VOLATILE=/tmp
 LOG_FILE=~/logs_sleepnoise.log
 NOW=$(date "+%Y-%m-%d %H:%M:%S")
@@ -20,44 +21,28 @@ noise="$NPREFIX/audiocheck.net_brownnoise.wav"
 
 get_volume() {
   currenttime=$(date +%H:%M)
-  if [[ "$currenttime" < "06:00" ]]
-  then
-    echo "0.0"
-  elif [[ "$currenttime" < "06:30" ]]
-  then
-    echo "0.5"
-  elif [[ "$currenttime" < "09:00" ]]
-  then
-    echo "1"
-  elif [[ "$currenttime" < "17:00" ]]
-  then
-    echo "0.5"
-  elif [[ "$currenttime" < "20:30" ]]
-  then
-    echo "1"
-  elif [[ "$currenttime" < "21:00" ]]
-  then
-    echo "0.8"
-  elif [[ "$currenttime" < "21:30" ]]
-  then
-    echo "0.6"
-  else
-    echo "0"
-noise="$NPREFIX/audiocheck.net_pink_192k_-3dBFS.wav"
-  fi
-}
-
-play_sound() {
-  volume=$1
-  repeats=$2
-  echo "$NOW ${noise##*/} $repeats" >> $LOG_FILE
-  AUDIODEV=hw:2,0 play --volume=$volume -q -c 2 "$VOLATILE/${noise##*/}" repeat $repeats >/dev/null
-  #play --volume=$volume -q -c 2 "$VOLATILE/${noise##*/}" repeat $repeats >/dev/null
+  currenttimestamp=$(date +%s)
+  while IFS="" read -r p || [ -n "$p" ]
+  do
+    IFS=" " read -r entry volume endtime <<< "$p"
+    if [[ "$entry" == "override" ]] && [[ "$currenttimestamp" < "$endtime" ]]
+    then
+      break
+    elif [[ "$entry" == "set" ]] && [[ "$currenttime" < "$endtime" ]]
+    then
+      break
+    else
+      continue
+    fi
+  done < $SCHEDULE
+  echo "$volume"
 }
 
 while true
 do
   volume=$(get_volume)
-  echo $volume >> $LOG_FILE
-  play_sound $volume 100
+  echo "volume" $volume >> $LOG_FILE
+  repeats=100
+  echo "$NOW ${noise##*/} $repeats" >> $LOG_FILE
+  AUDIODEV=hw:2,0 play --volume=$volume -q -c 2 "$VOLATILE/${noise##*/}" repeat $repeats >/dev/null
 done
